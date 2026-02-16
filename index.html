@@ -1,4 +1,99 @@
-function loadFile(event) {
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Gas-Manager Pro (Safari Stable)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #007aff; --error: #ff3b30; --bg: #f2f2f7; --card: #ffffff; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); padding: 20px; color: #1c1c1e; }
+        .container { max-width: 900px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; align-items: end; }
+        input, select { padding: 8px; border: 1px solid #c6c6c8; border-radius: 8px; font-size: 14px; }
+        input.invalid { border: 2px solid var(--error); }
+        button { background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 15px; border-radius: 12px; text-align: center; }
+        .stat-value { display: block; font-size: 1.2rem; font-weight: bold; color: var(--primary); }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e5e5e7; }
+        .tag { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        #chartWrapper { height: 300px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h2 style="margin:0">⛽ Gas-Manager</h2>
+            <small id="status">Bereit zum Laden...</small>
+        </div>
+        <div>
+            <input type="file" id="fileInput" class="hidden" accept=".json" onchange="loadFile(event)">
+            <button onclick="document.getElementById('fileInput').click()">Datei öffnen</button>
+            <button id="btnSave" style="background: #34c759; display:none;" onclick="exportData()">Daten Speichern</button>
+        </div>
+    </header>
+
+    <div class="card" id="mainUI" style="opacity:0.5; pointer-events:none;">
+        <div class="grid-form">
+            <div style="display:flex; flex-direction:column">
+                <label style="font-size:12px">Datum</label>
+                <input type="text" id="inDate" placeholder="tt.mm.yyyy">
+            </div>
+            <div style="display:flex; flex-direction:column">
+                <label style="font-size:12px">Typ</label>
+                <select id="inType" onchange="toggleForm()">
+                    <option value="zaehler">Zählerstand</option>
+                    <option value="lieferung">Lieferung</option>
+                </select>
+            </div>
+            <div id="divZaehler" style="display:flex; flex-direction:column">
+                <label style="font-size:12px">Stand (m³)</label>
+                <input type="text" id="inZaehler">
+            </div>
+            <div id="divMenge" style="display:none; flex-direction:column">
+                <label style="font-size:12px">Menge (m³)</label>
+                <input type="text" id="inMenge">
+            </div>
+            <div id="divPreis" style="display:none; flex-direction:column">
+                <label style="font-size:12px">Preis (€)</label>
+                <input type="text" id="inPreis">
+            </div>
+            <button onclick="addEntry()">Hinzufügen</button>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card"> <span class="stat-label">Menge</span> <span class="stat-value" id="sM">0,00 m³</span> </div>
+        <div class="stat-card"> <span class="stat-label">Kosten</span> <span class="stat-value" id="sK">0,00 €</span> </div>
+        <div class="stat-card"> <span class="stat-label">Ø Preis</span> <span class="stat-value" id="sP">0,00 €/m³</span> </div>
+    </div>
+
+    <div class="card">
+        <div id="chartWrapper"><canvas id="gasChart"></canvas></div>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead><tr><th>Datum</th><th>Typ</th><th>Wert</th><th>Kosten</th><th>Notiz</th></tr></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let appData = { eintraege: [] };
+    let chart = null;
+
+    const toF = (v) => parseFloat(String(v).replace(',', '.'));
+    const fmt = (v) => new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+
+    function loadFile(event) {
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -20,10 +115,111 @@ function loadFile(event) {
             document.getElementById('btnSave').style.display = "inline-block";
             document.getElementById('status').innerText = "Datei: " + file.name;
             updateUI();
-        } catch(err) { 
-            console.error("JSON Fehler:", err);
-            alert("Die Datei enthält ungültiges Format. Bitte prüfe, ob es eine echte .json Datei ist."); 
+            } catch(err) { 
+              console.error("JSON Fehler:", err);
+              alert("Die Datei enthält ungültiges Format. Bitte prüfe, ob es eine echte .json Datei ist."); 
+              }
+           };
+           reader.readAsText(file);
         }
-    };
-    reader.readAsText(file);
-}
+
+    function toggleForm() {
+        const isL = document.getElementById('inType').value === 'lieferung';
+        document.getElementById('divZaehler').style.display = isL ? 'none' : 'flex';
+        document.getElementById('divMenge').style.display = isL ? 'flex' : 'none';
+        document.getElementById('divPreis').style.display = isL ? 'flex' : 'none';
+    }
+
+    function loadFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                appData = JSON.parse(e.target.result);
+                document.getElementById('mainUI').style.opacity = "1";
+                document.getElementById('mainUI').style.pointerEvents = "all";
+                document.getElementById('btnSave').style.display = "inline-block";
+                document.getElementById('status').innerText = "Datei: " + file.name;
+                updateUI();
+            } catch(err) { alert("Datei korrupt!"); }
+        };
+        reader.readAsText(file);
+    }
+
+    function addEntry() {
+        const dateStr = document.getElementById('inDate').value;
+        const type = document.getElementById('inType').value;
+        const entry = { typ: type, datum: dateStr, notiz: "" };
+
+        if (type === 'zaehler') {
+            entry.zaehlerstand_m3 = toF(document.getElementById('inZaehler').value);
+        } else {
+            entry.menge_m3 = toF(document.getElementById('inMenge').value);
+            entry.preis_total_eur = toF(document.getElementById('inPreis').value);
+            entry.preis_pro_m3_eur = entry.menge_m3 > 0 ? entry.preis_total_eur / entry.menge_m3 : 0;
+        }
+
+        appData.eintraege.push(entry);
+        updateUI();
+        // Automatischer Hinweis zum Speichern
+        document.getElementById('btnSave').style.boxShadow = "0 0 10px #34c759";
+    }
+
+    function exportData() {
+        const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gasdaten.json';
+        a.click();
+        document.getElementById('btnSave').style.boxShadow = "none";
+    }
+
+    function updateUI() {
+        const parseDate = (s) => { const p = s.split('.'); return new Date(p[2], p[1]-1, p[0]); };
+        appData.eintraege.sort((a,b) => parseDate(a.datum) - parseDate(b.datum));
+
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let m = 0, k = 0;
+
+        appData.eintraege.forEach(e => {
+            const isL = e.typ === 'lieferung';
+            if(isL) { m += e.menge_m3; k += e.preis_total_eur; }
+            tbody.innerHTML += `<tr>
+                <td>${e.datum}</td>
+                <td><span class="tag" style="background:${isL?'#e8f5e9':'#e1f5fe'}">${isL?'Lief':'Zähl'}</span></td>
+                <td>${fmt(isL?e.menge_m3:e.zaehlerstand_m3)} m³</td>
+                <td>${isL?fmt(e.preis_total_eur)+' €':'-'}</td>
+                <td>${e.notiz}</td>
+            </tr>`;
+        });
+
+        document.getElementById('sM').innerText = fmt(m) + " m³";
+        document.getElementById('sK').innerText = fmt(k) + " €";
+        document.getElementById('sP').innerText = fmt(m>0?k/m:0) + " €/m³";
+        renderChart();
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById('gasChart').getContext('2d');
+        if(chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: appData.eintraege.map(e => e.datum),
+                datasets: [{
+                    label: 'Verlauf (m³)',
+                    data: appData.eintraege.map(e => e.typ === 'zaehler' ? e.zaehlerstand_m3 : null),
+                    borderColor: '#007aff',
+                    spanGaps: true
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
+</body>
+</html>
+
