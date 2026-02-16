@@ -1,0 +1,29 @@
+function loadFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const content = e.target.result.trim();
+        try {
+            // Falls Datei leer ist, Standard-Struktur nutzen
+            if (content === "") {
+                appData = { eintraege: [] };
+            } else {
+                appData = JSON.parse(content);
+            }
+            
+            // Sicherstellen, dass das Array existiert
+            if (!appData.eintraege) appData.eintraege = [];
+
+            document.getElementById('mainUI').style.opacity = "1";
+            document.getElementById('mainUI').style.pointerEvents = "all";
+            document.getElementById('btnSave').style.display = "inline-block";
+            document.getElementById('status').innerText = "Datei: " + file.name;
+            updateUI();
+        } catch(err) { 
+            console.error("JSON Fehler:", err);
+            alert("Die Datei enthält ungültiges Format. Bitte prüfe, ob es eine echte .json Datei ist."); 
+        }
+    };
+    reader.readAsText(file);
+}
